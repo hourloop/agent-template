@@ -1,0 +1,11 @@
+# Sentinel file — do not edit or remove.
+#
+# When a new repository is created from `hourloop/agent-template`,
+# the presence of this file in the first push triggers
+# `.github/workflows/init.yml`. That workflow substitutes
+# `{{AGENT_NAME}}` / `{{AGENT_DESCRIPTION}}` placeholders from the
+# new repo's name + description, then deletes itself, this sentinel,
+# and `TEMPLATE.md`.
+#
+# After the init commit lands, this file no longer exists in the
+# new agent's repo.

@@ -1,0 +1,66 @@
+name: Initialize Agent Repo
+
+# Triggered by the first push to a new repo created from this template:
+# the sentinel file `.scaffold-init` only exists in the template, so
+# its arrival in a non-template repo means "this is the first push,
+# please initialise me." After the substitution + cleanup commit lands,
+# the sentinel is gone and this workflow is gone, so subsequent pushes
+# are no-ops.
+
+on:
+  push:
+    branches: [main]
+    paths: ['.scaffold-init']
+
+permissions:
+  contents: write  # the init commit needs to push back
+
+jobs:
+  init:
+    # Belt + braces — the path filter above keeps this from firing in
+    # the template repo itself, but pin the negative match here too so
+    # a force-push of the sentinel into the template can't trigger it.
+    if: github.repository != 'hourloop/agent-template'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Substitute placeholders + self-remove
+        env:
+          AGENT_SLUG: ${{ github.event.repository.name }}
+          AGENT_DESCRIPTION: ${{ github.event.repository.description }}
+        run: |
+          # Title-case the slug for display ("my-agent" -> "My Agent").
+          DISPLAY=$(printf '%s' "$AGENT_SLUG" \
+            | sed 's/[-_]/ /g' \
+            | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1))tolower(substr($i,2))}1')
+          DESC="${AGENT_DESCRIPTION:-A new agent managed by Guild.}"
+
+          # Substitute placeholders in every markdown file at the repo
+          # root. USER.md has no placeholders but a no-op replacement
+          # is harmless.
+          for f in *.md; do
+            [ -f "$f" ] || continue
+            sed -i "s|{{AGENT_NAME}}|$DISPLAY|g; s|{{AGENT_DESCRIPTION}}|$DESC|g" "$f"
+          done
+
+          # Self-removal: drop the sentinel, the template self-explainer,
+          # and this workflow itself. After the next commit lands the new
+          # repo is indistinguishable from a hand-scaffolded one.
+          rm -f .scaffold-init TEMPLATE.md .github/workflows/init.yml
+          rmdir .github/workflows .github 2>/dev/null || true
+
+      - name: Commit + push
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          # Single-line commit message — multi-line heredocs inside a
+          # YAML `run: |` block have to be carefully indented or the
+          # outer YAML parser breaks ("could not find expected ':'").
+          # Keep it terse here; the workflow's purpose is documented
+          # in the file header.
+          git commit -m "Initialize agent from template (substitute placeholders, remove init workflow)"
+          git push
